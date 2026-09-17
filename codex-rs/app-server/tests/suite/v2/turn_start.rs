@@ -4632,22 +4632,40 @@ async fn direct_input_to_multi_agent_v2_subagent_is_rejected(
         .await?;
 
     let child_thread_id = timeout(DEFAULT_READ_TIMEOUT, async {
+        let mut child_thread_id = None;
+        let mut received_failed_spawn = false;
         loop {
             let completed: ItemCompletedNotification =
                 mcp.read_notification("item/completed").await?;
-            assert!(!matches!(
-                &completed.item,
-                ThreadItem::CollabAgentToolCall { .. }
-            ));
-            if let ThreadItem::SubAgentActivity {
-                id,
-                kind: SubAgentActivityKind::Started,
-                agent_thread_id,
-                ..
-            } = completed.item
-                && id == SPAWN_CALL_ID
-            {
-                return Ok::<String, anyhow::Error>(agent_thread_id);
+            match completed.item {
+                item @ ThreadItem::CollabAgentToolCall { .. } => {
+                    assert!(!received_failed_spawn);
+                    assert_eq!(
+                        item,
+                        ThreadItem::CollabAgentToolCall {
+                            id: FAILED_SPAWN_CALL_ID.to_string(),
+                            tool: CollabAgentTool::SpawnAgent,
+                            status: CollabAgentToolCallStatus::Failed,
+                            sender_thread_id: thread.id.clone(),
+                            receiver_thread_ids: Vec::new(),
+                            prompt: None,
+                            model: None,
+                            reasoning_effort: None,
+                            agents_states: HashMap::new(),
+                        }
+                    );
+                    received_failed_spawn = true;
+                }
+                ThreadItem::SubAgentActivity {
+                    id,
+                    kind: SubAgentActivityKind::Started,
+                    agent_thread_id,
+                    ..
+                } if id == SPAWN_CALL_ID => child_thread_id = Some(agent_thread_id),
+                _ => {}
+            }
+            if received_failed_spawn && let Some(child_thread_id) = child_thread_id.take() {
+                return Ok::<String, anyhow::Error>(child_thread_id);
             }
         }
     })
