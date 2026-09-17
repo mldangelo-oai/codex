@@ -71,6 +71,7 @@ use codex_analytics::AppServerRpcTransport;
 use codex_app_server_protocol::AgentMessageDelivery;
 use codex_app_server_protocol::ClientNotification;
 use codex_app_server_protocol::ClientRequest;
+use codex_app_server_protocol::CollabAgentTool;
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::InitializeParams;
 use codex_app_server_protocol::ItemCompletedNotification;
@@ -79,6 +80,7 @@ use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::Result;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
+use codex_app_server_protocol::SubAgentActivityKind;
 use codex_app_server_protocol::ThreadItem;
 use codex_arg0::Arg0DispatchPaths;
 use codex_config::CloudConfigBundleLoader;
@@ -119,6 +121,12 @@ fn server_notification_requires_delivery(notification: &ServerNotification) -> b
             | ServerNotification::ItemCompleted(ItemCompletedNotification {
                 item: ThreadItem::AgentMessage {
                     delivery: Some(AgentMessageDelivery::Async),
+                    ..
+                } | ThreadItem::SubAgentActivity {
+                    kind: SubAgentActivityKind::Started,
+                    ..
+                } | ThreadItem::CollabAgentToolCall {
+                    tool: CollabAgentTool::SpawnAgent,
                     ..
                 },
                 ..
@@ -1008,6 +1016,34 @@ mod tests {
 
     #[test]
     fn guaranteed_delivery_helpers_cover_required_server_notifications() {
+        for item in [
+            ThreadItem::SubAgentActivity {
+                id: "spawn-1".to_string(),
+                kind: SubAgentActivityKind::Started,
+                agent_thread_id: "worker-1".to_string(),
+                agent_path: "/root/worker".to_string(),
+            },
+            ThreadItem::CollabAgentToolCall {
+                id: "spawn-2".to_string(),
+                tool: CollabAgentTool::SpawnAgent,
+                status: codex_app_server_protocol::CollabAgentToolCallStatus::Failed,
+                sender_thread_id: "parent-1".to_string(),
+                receiver_thread_ids: Vec::new(),
+                prompt: None,
+                model: None,
+                reasoning_effort: None,
+                agents_states: HashMap::new(),
+            },
+        ] {
+            assert!(server_notification_requires_delivery(
+                &ServerNotification::ItemCompleted(ItemCompletedNotification {
+                    item,
+                    thread_id: "parent-1".to_string(),
+                    turn_id: "turn-1".to_string(),
+                    completed_at_ms: 0,
+                })
+            ));
+        }
         assert!(server_notification_requires_delivery(
             &ServerNotification::TurnCompleted(TurnCompletedNotification {
                 thread_id: "thread-1".to_string(),

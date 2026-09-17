@@ -43,12 +43,39 @@ impl ToolExecutor<ToolInvocation> for Handler {
     where
         ToolInvocation: 'a,
     {
-        Box::pin(async move { handle_spawn_agent(invocation).await.map(boxed_tool_output) })
+        Box::pin(async move {
+            let session = invocation.session.clone();
+            let turn = invocation.step_context.turn.clone();
+            let call_id = invocation.call_id.clone();
+            let mut completion_emitted = false;
+            let result = handle_spawn_agent(invocation, &mut completion_emitted).await;
+            if result.is_err() && !completion_emitted {
+                session
+                    .emit_turn_item_completed(
+                        &turn,
+                        TurnItem::CollabAgentToolCall(CollabAgentToolCallItem {
+                            id: call_id,
+                            tool: CollabAgentTool::SpawnAgent,
+                            status: CollabAgentToolCallStatus::Failed,
+                            sender_thread_id: session.thread_id,
+                            receiver_thread_ids: Vec::new(),
+                            receiver_agents: Vec::new(),
+                            prompt: None,
+                            model: None,
+                            reasoning_effort: None,
+                            agents_states: Default::default(),
+                        }),
+                    )
+                    .await;
+            }
+            result.map(boxed_tool_output)
+        })
     }
 }
 
 async fn handle_spawn_agent(
     invocation: ToolInvocation,
+    completion_emitted: &mut bool,
 ) -> Result<SpawnAgentResult, FunctionCallError> {
     let ToolInvocation {
         session,
@@ -200,6 +227,7 @@ async fn handle_spawn_agent(
             }),
         )
         .await;
+    *completion_emitted = true;
     let new_thread_id = result?.thread_id;
     let role_tag = role_name.unwrap_or(DEFAULT_ROLE_NAME);
     turn.session_telemetry.counter(
