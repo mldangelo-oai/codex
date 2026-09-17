@@ -61,6 +61,21 @@ export type ItemCompletedEvent = {
   item: ThreadItem;
 };
 
+/** Emitted after the runtime spawns a worker in this thread. No prompt or task name is included. */
+export type WorkerSpawnedEvent = {
+  type: "worker.spawned";
+  /** Turn-scoped dispatch identifier, stable across repeated notifications. */
+  dispatch_id: string;
+  worker_thread_id: string;
+};
+
+/** Emitted after a worker spawn attempt fails. Error text is deliberately omitted. */
+export type WorkerSpawnFailedEvent = {
+  type: "worker.spawn_failed";
+  /** Turn-scoped dispatch identifier, stable across repeated notifications. */
+  dispatch_id: string;
+};
+
 /** Fatal error emitted by the stream. */
 export type ThreadError = {
   message: string;
@@ -81,4 +96,6 @@ export type ThreadEvent =
   | ItemStartedEvent
   | ItemUpdatedEvent
   | ItemCompletedEvent
+  | WorkerSpawnedEvent
+  | WorkerSpawnFailedEvent
   | ThreadErrorEvent;

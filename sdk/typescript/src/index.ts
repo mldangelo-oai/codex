@@ -7,6 +7,8 @@ export type {
   ItemStartedEvent,
   ItemUpdatedEvent,
   ItemCompletedEvent,
+  WorkerSpawnedEvent,
+  WorkerSpawnFailedEvent,
   ThreadError,
   ThreadErrorEvent,
   Usage,

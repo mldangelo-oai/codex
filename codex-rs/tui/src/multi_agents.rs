@@ -927,6 +927,27 @@ mod tests {
     }
 
     #[test]
+    fn collab_spawn_failed_snapshot() {
+        let cell = tool_call_history_cell(
+            &ThreadItem::CollabAgentToolCall {
+                id: "failed-spawn".to_string(),
+                tool: CollabAgentTool::SpawnAgent,
+                status: CollabAgentToolCallStatus::Failed,
+                sender_thread_id: "00000000-0000-0000-0000-000000000001".to_string(),
+                receiver_thread_ids: Vec::new(),
+                prompt: None,
+                model: None,
+                reasoning_effort: None,
+                agents_states: HashMap::new(),
+            },
+            /*cached_spawn_request*/ None,
+            |_| AgentMetadata::default(),
+        )
+        .expect("failed spawn renders");
+        assert_snapshot!("collab_spawn_failed", cell_to_text(&cell));
+    }
+
+    #[test]
     fn collab_resume_interrupted_snapshot() {
         let sender_thread_id = ThreadId::from_string("00000000-0000-0000-0000-000000000001")
             .expect("valid sender thread id");

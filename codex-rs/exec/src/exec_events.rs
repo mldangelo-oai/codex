@@ -31,6 +31,12 @@ pub enum ThreadEvent {
     /// Signals that an item has reached a terminal state—either success or failure.
     #[serde(rename = "item.completed")]
     ItemCompleted(ItemCompletedEvent),
+    /// Emitted after the runtime successfully spawns a worker in this thread.
+    #[serde(rename = "worker.spawned")]
+    WorkerSpawned(WorkerSpawnedEvent),
+    /// Emitted after a worker spawn attempt fails in this thread.
+    #[serde(rename = "worker.spawn_failed")]
+    WorkerSpawnFailed(WorkerSpawnFailedEvent),
     /// Represents an unrecoverable error emitted directly by the event stream.
     #[serde(rename = "error")]
     Error(ThreadErrorEvent),
@@ -54,6 +60,21 @@ pub struct TurnCompletedEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 pub struct TurnFailedEvent {
     pub error: ThreadErrorEvent,
+}
+
+/// A successful runtime worker spawn, without the worker's prompt or task name.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+pub struct WorkerSpawnedEvent {
+    /// Turn-scoped dispatch identifier, stable across repeated notifications.
+    pub dispatch_id: String,
+    pub worker_thread_id: String,
+}
+
+/// A failed runtime worker spawn, without the potentially sensitive error text.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+pub struct WorkerSpawnFailedEvent {
+    /// Turn-scoped dispatch identifier, stable across repeated notifications.
+    pub dispatch_id: String,
 }
 
 /// Describes the usage of tokens during a turn.

@@ -215,6 +215,7 @@ mod websocket_fallback;
 mod window_headers;
 #[cfg(target_os = "windows")]
 mod windows_sandbox;
+mod worker_dispatch;
 mod workspace_roots;
 mod worktree_trust;
 

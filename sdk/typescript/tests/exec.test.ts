@@ -8,6 +8,7 @@ import { PassThrough } from "node:stream";
 import { describe, expect, it } from "@jest/globals";
 
 import type { CodexConfigObject } from "../src/codexOptions";
+import { Codex, type ThreadEvent } from "../src/index";
 
 jest.mock("node:child_process", () => {
   const actual = jest.requireActual<typeof import("node:child_process")>("node:child_process");
@@ -46,6 +47,27 @@ function createEarlyExitChild(exitCode = 2): FakeChildProcess {
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("CodexExec", () => {
+  it("streams runtime worker outcomes without interpreting assistant text", async () => {
+    spawnMock.mockClear();
+    const child = new FakeChildProcess();
+    spawnMock.mockReturnValue(child as unknown as child_process.ChildProcess);
+    const expected: ThreadEvent[] = [
+      { type: "thread.started", thread_id: "parent-1" },
+      { type: "worker.spawned", dispatch_id: "spawn-1", worker_thread_id: "child-1" },
+      { type: "worker.spawn_failed", dispatch_id: "spawn-2" },
+    ];
+    setImmediate(() => {
+      child.stdout.end(expected.map((event) => JSON.stringify(event)).join("\n") + "\n");
+      child.stderr.end();
+      child.emit("exit", 0, null);
+    });
+    const client = new Codex({ codexPathOverride: "codex" });
+    const result = await client.startThread().runStreamed("synthetic task");
+    const events: ThreadEvent[] = [];
+    for await (const event of result.events) events.push(event);
+    expect(events).toEqual(expected);
+  });
+
   it("rejects when exit happens before stdout closes", async () => {
     const { CodexExec } = await import("../src/exec");
     const child = createEarlyExitChild();

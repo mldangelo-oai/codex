@@ -75,6 +75,7 @@ use codex_exec::TurnFailedEvent;
 use codex_exec::TurnStartedEvent;
 use codex_exec::Usage;
 use codex_exec::WebSearchItem;
+use codex_exec::WorkerSpawnedEvent;
 
 #[test]
 fn map_todo_items_preserves_text_and_completion_state() {
@@ -796,25 +797,31 @@ fn collab_spawn_begin_and_end_emit_item_events() {
     assert_eq!(
         completed,
         CollectedThreadEvents {
-            events: vec![ThreadEvent::ItemCompleted(ItemCompletedEvent {
-                item: ExecThreadItem {
-                    id: "item_0".to_string(),
-                    details: ThreadItemDetails::CollabToolCall(CollabToolCallItem {
-                        tool: CollabTool::SpawnAgent,
-                        sender_thread_id: "thread-parent".to_string(),
-                        receiver_thread_ids: vec!["thread-child".to_string()],
-                        prompt: Some("draft a plan".to_string()),
-                        agents_states: std::collections::HashMap::from([(
-                            "thread-child".to_string(),
-                            CollabAgentState {
-                                status: CollabAgentStatus::Running,
-                                message: None,
-                            },
-                        )]),
-                        status: CollabToolCallStatus::Completed,
-                    },),
-                },
-            })],
+            events: vec![
+                ThreadEvent::WorkerSpawned(WorkerSpawnedEvent {
+                    dispatch_id: "turn-1:collab-1".to_string(),
+                    worker_thread_id: "thread-child".to_string(),
+                }),
+                ThreadEvent::ItemCompleted(ItemCompletedEvent {
+                    item: ExecThreadItem {
+                        id: "item_0".to_string(),
+                        details: ThreadItemDetails::CollabToolCall(CollabToolCallItem {
+                            tool: CollabTool::SpawnAgent,
+                            sender_thread_id: "thread-parent".to_string(),
+                            receiver_thread_ids: vec!["thread-child".to_string()],
+                            prompt: Some("draft a plan".to_string()),
+                            agents_states: std::collections::HashMap::from([(
+                                "thread-child".to_string(),
+                                CollabAgentState {
+                                    status: CollabAgentStatus::Running,
+                                    message: None,
+                                },
+                            )]),
+                            status: CollabToolCallStatus::Completed,
+                        },),
+                    },
+                })
+            ],
             status: CodexStatus::Running,
         }
     );

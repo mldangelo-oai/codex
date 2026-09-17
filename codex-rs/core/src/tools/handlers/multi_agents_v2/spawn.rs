@@ -19,6 +19,8 @@ use crate::turn_timing::now_unix_timestamp_ms;
 use codex_prompts::ResolvedModelMessages;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::ItemCompletedEvent;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::ToolSpec;
 
@@ -54,7 +56,9 @@ impl ToolExecutor<ToolInvocation> for Handler {
         ToolInvocation: 'a,
     {
         Box::pin(async move {
-            let analytics = invocation.session.services.analytics_events_client.clone();
+            let session = invocation.session.clone();
+            let turn = invocation.step_context.turn.clone();
+            let analytics = session.services.analytics_events_client.clone();
             let sender_thread_id = invocation.session.thread_id;
             let turn_id = invocation.step_context.turn.sub_id.clone();
             let call_id = invocation.call_id.clone();
@@ -78,24 +82,36 @@ impl ToolExecutor<ToolInvocation> for Handler {
                 .ok()
                 .and_then(|(_, _, _, snapshot)| snapshot.as_ref());
 
-            analytics.track_collab_tool_call(
-                turn_id,
-                CollabAgentToolCallItem {
-                    id: call_id,
-                    tool: CollabAgentTool::SpawnAgent,
-                    status,
-                    sender_thread_id,
-                    receiver_thread_ids,
-                    receiver_agents: Vec::new(),
-                    prompt: None,
-                    model: agent_snapshot.map(|snapshot| snapshot.model.clone()),
-                    reasoning_effort: agent_snapshot
-                        .and_then(|snapshot| snapshot.reasoning_effort.clone()),
-                    agents_states,
-                },
-                started_at_ms,
-                completed_at_ms,
-            );
+            let item = CollabAgentToolCallItem {
+                id: call_id,
+                tool: CollabAgentTool::SpawnAgent,
+                status,
+                sender_thread_id,
+                receiver_thread_ids,
+                receiver_agents: Vec::new(),
+                prompt: None,
+                model: agent_snapshot.map(|snapshot| snapshot.model.clone()),
+                reasoning_effort: agent_snapshot
+                    .and_then(|snapshot| snapshot.reasoning_effort.clone()),
+                agents_states,
+            };
+            // Successful v2 spawns already emit SubAgentActivity::Started. Failed
+            // attempts need a live outcome too, including failures before creation.
+            if result.is_err() {
+                session
+                    .send_event(
+                        &turn,
+                        EventMsg::ItemCompleted(ItemCompletedEvent {
+                            thread_id: sender_thread_id,
+                            turn_id: turn_id.clone(),
+                            item: TurnItem::CollabAgentToolCall(item.clone()),
+                            started_at_ms: Some(started_at_ms),
+                            completed_at_ms,
+                        }),
+                    )
+                    .await;
+            }
+            analytics.track_collab_tool_call(turn_id, item, started_at_ms, completed_at_ms);
 
             result.map(|(output, _, _, _)| boxed_tool_output(output))
         })

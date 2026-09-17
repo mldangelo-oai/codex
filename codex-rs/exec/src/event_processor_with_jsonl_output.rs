@@ -10,6 +10,7 @@ use codex_app_server_protocol::McpToolCallStatus;
 use codex_app_server_protocol::PatchApplyStatus;
 use codex_app_server_protocol::PatchChangeKind;
 use codex_app_server_protocol::ServerNotification;
+use codex_app_server_protocol::SubAgentActivityKind;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadTokenUsage;
 use codex_app_server_protocol::TurnStatus;
@@ -54,6 +55,8 @@ use crate::exec_events::TurnFailedEvent;
 use crate::exec_events::TurnStartedEvent;
 use crate::exec_events::Usage;
 use crate::exec_events::WebSearchItem;
+use crate::exec_events::WorkerSpawnFailedEvent;
+use crate::exec_events::WorkerSpawnedEvent;
 
 pub struct EventProcessorWithJsonOutput {
     last_message_path: Option<PathBuf>,
@@ -474,6 +477,43 @@ impl EventProcessorWithJsonOutput {
                 CodexStatus::Running
             }
             ServerNotification::ItemCompleted(notification) => {
+                match &notification.item {
+                    ThreadItem::SubAgentActivity {
+                        id,
+                        kind: SubAgentActivityKind::Started,
+                        agent_thread_id,
+                        ..
+                    } => events.push(ThreadEvent::WorkerSpawned(WorkerSpawnedEvent {
+                        dispatch_id: format!("{}:{id}", notification.turn_id),
+                        worker_thread_id: agent_thread_id.clone(),
+                    })),
+                    ThreadItem::CollabAgentToolCall {
+                        id,
+                        tool: CollabAgentTool::SpawnAgent,
+                        status,
+                        receiver_thread_ids,
+                        ..
+                    } => match status {
+                        CollabAgentToolCallStatus::Completed
+                        | CollabAgentToolCallStatus::Failed => {
+                            if let Some(thread_id) = receiver_thread_ids.first() {
+                                events.push(ThreadEvent::WorkerSpawned(WorkerSpawnedEvent {
+                                    dispatch_id: format!("{}:{id}", notification.turn_id),
+                                    worker_thread_id: thread_id.clone(),
+                                }));
+                            } else if *status == CollabAgentToolCallStatus::Failed {
+                                events.push(ThreadEvent::WorkerSpawnFailed(
+                                    WorkerSpawnFailedEvent {
+                                        dispatch_id: format!("{}:{id}", notification.turn_id),
+                                    },
+                                ));
+                            }
+                        }
+                        CollabAgentToolCallStatus::InProgress
+                        | CollabAgentToolCallStatus::Interrupted => {}
+                    },
+                    _ => {}
+                }
                 if let Some(item) = self.map_completed_item_mut(notification.item) {
                     if let ThreadItemDetails::AgentMessage(AgentMessageItem { text }) =
                         &item.details
