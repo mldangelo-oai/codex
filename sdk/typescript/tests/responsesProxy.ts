@@ -42,6 +42,7 @@ export type ResponsesProxy = {
 
 export type ResponsesApiRequest = {
   model?: string;
+  access_programs?: { cyber: string };
   input: Array<{
     role: string;
     content?: Array<{ type: string; text: string }>;
@@ -117,6 +118,11 @@ export async function startResponsesTestProxy(
       res.statusCode = 500;
       res.end();
     });
+  });
+
+  // This fixture serves SSE; built-in providers use HTTP after this response.
+  server.on("upgrade", (_req, socket) => {
+    socket.end("HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
   });
 
   const url = await new Promise<string>((resolve, reject) => {

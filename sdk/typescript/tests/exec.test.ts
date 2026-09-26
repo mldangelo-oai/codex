@@ -185,7 +185,7 @@ describe("CodexExec", () => {
     },
   );
 
-  it("passes the thread source when starting a new thread", async () => {
+  it("passes the thread source and cyber program when starting a new thread", async () => {
     const { CodexExec } = await import("../src/exec");
     spawnMock.mockClear();
     const child = new FakeChildProcess();
@@ -198,7 +198,11 @@ describe("CodexExec", () => {
     });
 
     const exec = new CodexExec("codex");
-    for await (const _ of exec.run({ input: "hi", threadSource: "automated_review" })) {
+    for await (const _ of exec.run({
+      input: "hi",
+      threadSource: "automated_review",
+      cyberAccessProgram: "daybreak_blue",
+    })) {
       // no-op
     }
 
@@ -207,6 +211,8 @@ describe("CodexExec", () => {
       "--experimental-json",
       "--thread-source",
       "automated_review",
+      "--cyber-access-program",
+      "daybreak_blue",
     ]);
   });
 
@@ -231,6 +237,7 @@ describe("CodexExec", () => {
       input: "resume with overrides",
       threadId: "thread-id",
       threadSource: "should_not_override",
+      cyberAccessProgram: "daybreak_red",
       baseUrl: "https://managed.example.test",
       approvalPolicy: "on-request",
       networkAccessEnabled: false,
@@ -252,6 +259,8 @@ describe("CodexExec", () => {
       "sandbox_workspace_write={network_access=true}",
       "--config",
       'openai_base_url="https://managed.example.test"',
+      "--cyber-access-program",
+      "daybreak_red",
       "--config",
       "sandbox_workspace_write.network_access=false",
       "--config",

@@ -83,6 +83,22 @@ const turn = await thread.run("Summarize repository status", {
 console.log(turn.finalResponse);
 ```
 
+### Cyber access programs
+
+Pass the experimental `cyberAccessProgram` turn option to `run()` or `runStreamed()` to request
+`"standard"`, `"daybreak_blue"`, or `"daybreak_red"` with the built-in OpenAI provider. This works with
+API-key and ChatGPT authentication; the server determines access and model eligibility.
+
+```typescript
+const thread = codex.startThread();
+await thread.run("Review the repository's security", { cyberAccessProgram: "daybreak_blue" });
+```
+
+The selection applies only to that turn. Pass it again for later turns, including after `resumeThread()`.
+Omitting it leaves selection to the server; `"standard"` explicitly requests standard treatment. This
+option does not grant access or change the selected model. The SDK forwards it as
+`codex exec --cyber-access-program <program>`, which requires a CLI version that supports the flag.
+
 ### Attaching images
 
 Provide structured input entries when you need to include images alongside text. Text entries are concatenated into the final prompt while image entries are passed to the Codex CLI via `--image`.

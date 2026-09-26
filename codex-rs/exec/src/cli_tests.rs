@@ -11,6 +11,8 @@ fn resume_parses_prompt_after_global_flags() {
         "--json",
         "--model",
         "gpt-5.2-codex",
+        "--cyber-access-program",
+        "daybreak_blue",
         "--dangerously-bypass-approvals-and-sandbox",
         "--skip-git-repo-check",
         "--ephemeral",
@@ -22,6 +24,10 @@ fn resume_parses_prompt_after_global_flags() {
     assert!(cli.ephemeral);
     assert!(cli.ignore_user_config);
     assert!(cli.ignore_rules);
+    assert_eq!(
+        cli.cyber_access_program,
+        Some(CyberAccessProgramCliArg::DaybreakBlue)
+    );
     let Some(Command::Resume(args)) = cli.command else {
         panic!("expected resume command");
     };
@@ -71,6 +77,8 @@ fn fork_parses_prompt_after_global_flags() {
         "--json",
         "--model",
         "gpt-5.2-codex",
+        "--cyber-access-program",
+        "standard",
         "--thread-source",
         "automated_review",
         "--skip-git-repo-check",
@@ -80,6 +88,10 @@ fn fork_parses_prompt_after_global_flags() {
 
     assert!(cli.json);
     assert!(cli.ephemeral);
+    assert_eq!(
+        cli.cyber_access_program,
+        Some(CyberAccessProgramCliArg::Standard)
+    );
     assert_eq!(
         cli.thread_source,
         Some(ThreadSource::Feature("automated_review".to_string()))

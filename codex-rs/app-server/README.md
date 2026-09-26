@@ -30,6 +30,15 @@ the choice unset. Ephemeral threads cannot save it.
 Use `thread/metadata/update` for later changes. This preference does not select
 `turn/start.cyberAccessProgram` or grant access to an access program.
 
+With the built-in OpenAI provider, `turn/start.cyberAccessProgram` accepts
+`standard`, `daybreakBlue`, or `daybreakRed` with either ChatGPT or API-key
+authentication and the `experimentalApi` opt-in. The choice applies to the
+started turn, including its continuation and recovery, and is not a default for
+later turns. Omitted or null leaves `access_programs` absent from the model
+request so the server can apply its defaults. Authorization and model support
+remain server-owned: a rejected explicit selection fails the turn rather than
+retrying without the selection.
+
 # Application network policy
 
 App-server loads application network policy at startup and existing explicit

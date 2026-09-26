@@ -7,6 +7,6 @@ pub(crate) fn for_auth(
     program: Option<CyberAccessProgram>,
 ) -> Option<AccessPrograms> {
     program
-        .filter(|_| auth.is_some_and(CodexAuth::is_chatgpt_auth))
+        .filter(|_| auth.is_some_and(|auth| auth.is_chatgpt_auth() || auth.is_api_key_auth()))
         .map(AccessPrograms::from)
 }

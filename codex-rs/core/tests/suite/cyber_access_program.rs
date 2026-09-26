@@ -20,14 +20,19 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
 use serde_json::json;
+use test_case::test_case;
 use tokio::sync::oneshot;
 use wiremock::Mock;
 use wiremock::matchers::header;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+#[test_case(CodexAuth::create_dummy_chatgpt_auth_for_testing(); "chatgpt")]
+#[test_case(CodexAuth::from_api_key("test-api-key"); "api_key")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn recover_turn_restores_cyber_access_program_without_making_it_sticky() -> Result<()> {
+async fn recover_turn_restores_cyber_access_program_without_making_it_sticky(
+    auth: CodexAuth,
+) -> Result<()> {
     // Keep sampling pending until interruption so restart must reload the unfinished turn.
     let (release_response, response_gate) = oneshot::channel();
     let (initial_server, _completions) =
@@ -36,7 +41,7 @@ async fn recover_turn_restores_cyber_access_program_without_making_it_sticky() -
             body: responses::sse(vec![responses::ev_completed("resp-initial")]),
         }]])
         .await;
-    let mut builder = test_codex().with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let mut builder = test_codex().with_auth(auth);
     let initial = builder.build_with_streaming_server(&initial_server).await?;
     let TurnInputSubmission::Started { turn_id } = initial
         .codex
@@ -159,11 +164,11 @@ async fn recover_turn_restores_cyber_access_program_without_making_it_sticky() -
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn cyber_access_program_omits_api_key_and_spoofed_custom_provider() -> Result<()> {
+async fn cyber_access_program_omits_spoofed_custom_provider() -> Result<()> {
     core_test_support::skip_if_no_network!(Ok(()));
-    for (auth, provider_id) in [
-        (CodexAuth::from_api_key("test-key"), "openai"),
-        (CodexAuth::create_dummy_chatgpt_auth_for_testing(), "custom"),
+    for auth in [
+        CodexAuth::from_api_key("test-key"),
+        CodexAuth::create_dummy_chatgpt_auth_for_testing(),
     ] {
         let server = responses::start_mock_server().await;
         let request = responses::mount_sse_once(
@@ -173,9 +178,9 @@ async fn cyber_access_program_omits_api_key_and_spoofed_custom_provider() -> Res
         .await;
         let test = test_codex()
             .with_auth(auth)
-            .with_config(move |config| {
+            .with_config(|config| {
                 // Keep the display name "OpenAI": provider identity must not use it.
-                config.model_provider_id = provider_id.to_owned();
+                config.model_provider_id = "custom".to_owned();
             })
             .build_with_auto_env(&server)
             .await?;
@@ -188,8 +193,12 @@ async fn cyber_access_program_omits_api_key_and_spoofed_custom_provider() -> Res
     Ok(())
 }
 
+#[test_case(CodexAuth::create_dummy_chatgpt_auth_for_testing(); "chatgpt")]
+#[test_case(CodexAuth::from_api_key("test-api-key"); "api_key")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn cyber_access_program_survives_mid_turn_remote_compaction_v2() -> Result<()> {
+async fn cyber_access_program_survives_mid_turn_remote_compaction_v2(
+    auth: CodexAuth,
+) -> Result<()> {
     core_test_support::skip_if_no_network!(Ok(()));
     let server = responses::start_mock_server().await;
     let requests = responses::mount_sse_sequence(
@@ -216,7 +225,7 @@ async fn cyber_access_program_survives_mid_turn_remote_compaction_v2() -> Result
     )
     .await;
     let test = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_auth(auth)
         .with_config(|config| config.model_auto_compact_token_limit = Some(200))
         .build_with_auto_env(&server)
         .await?;
@@ -235,8 +244,10 @@ async fn cyber_access_program_survives_mid_turn_remote_compaction_v2() -> Result
     Ok(())
 }
 
+#[test_case(CodexAuth::create_dummy_chatgpt_auth_for_testing(); "chatgpt")]
+#[test_case(CodexAuth::from_api_key("test-api-key"); "api_key")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
+async fn cyber_access_program_is_inherited_by_child_turns(auth: CodexAuth) -> Result<()> {
     // Final answers defer late child completion mail to the next parent turn.
     let final_response = |id: &str| {
         responses::sse(vec![
@@ -285,7 +296,7 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
         )
         .await;
         let test = test_codex()
-            .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+            .with_auth(auth.clone())
             .with_model(if is_v2 { "gpt-5.6-sol" } else { "gpt-5.1" })
             .with_config(move |config| {
                 config
@@ -391,8 +402,12 @@ async fn cyber_access_program_is_inherited_by_child_turns() -> Result<()> {
     Ok(())
 }
 
+#[test_case(CodexAuth::create_dummy_chatgpt_auth_for_testing(); "chatgpt")]
+#[test_case(CodexAuth::from_api_key("test-api-key"); "api_key")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn cyber_access_program_changes_on_one_websocket_with_response_reuse() -> Result<()> {
+async fn cyber_access_program_changes_on_one_websocket_with_response_reuse(
+    auth: CodexAuth,
+) -> Result<()> {
     core_test_support::skip_if_no_network!(Ok(()));
     let response_ids = [
         "prewarm", "first", "second", "blue", "red", "off", "omitted",
@@ -405,7 +420,7 @@ async fn cyber_access_program_changes_on_one_websocket_with_response_reuse() -> 
     ])
     .await;
     let test = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_auth(auth)
         .build_with_websocket_server(&server)
         .await?;
     for program in [

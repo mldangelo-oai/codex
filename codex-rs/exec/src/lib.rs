@@ -231,6 +231,7 @@ struct ExecRunArgs {
     skip_git_repo_check: bool,
     stderr_with_ansi: bool,
     thread_source: ThreadSource,
+    cyber_access_program: Option<codex_app_server_protocol::CyberAccessProgram>,
 }
 
 struct ManagedExecWorktree {
@@ -266,6 +267,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         strict_config,
         shared,
         thread_source,
+        cyber_access_program,
         skip_git_repo_check,
         ephemeral,
         ignore_user_config,
@@ -277,6 +279,17 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         output_schema: output_schema_path,
         mut config_overrides,
     } = cli;
+    if cyber_access_program.is_some() {
+        match command.as_ref() {
+            Some(ExecCommand::Review(_)) => {
+                anyhow::bail!("--cyber-access-program is not supported with `codex exec review`");
+            }
+            Some(ExecCommand::Fork(args)) if args.prompt.is_none() && prompt.is_none() => {
+                anyhow::bail!("Forking with --cyber-access-program requires a prompt");
+            }
+            Some(ExecCommand::Resume(_) | ExecCommand::Fork(_)) | None => {}
+        }
+    }
     let mut shared = shared.into_inner();
     shared.take_auto_review_config_overrides(&mut config_overrides);
     let SharedCliOptions {
@@ -750,6 +763,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         skip_git_repo_check,
         stderr_with_ansi,
         thread_source: thread_source.map(Into::into).unwrap_or(ThreadSource::User),
+        cyber_access_program: cyber_access_program.map(Into::into),
     })
     .instrument(exec_span)
     .await
@@ -850,6 +864,7 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         skip_git_repo_check,
         stderr_with_ansi,
         thread_source,
+        cyber_access_program,
     } = args;
 
     let mut event_processor: Box<dyn EventProcessor> = match json_mode {
@@ -1176,7 +1191,7 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                         output_schema,
                         collaboration_mode: None,
                         multi_agent_mode: None,
-                        cyber_access_program: None,
+                        cyber_access_program,
                     },
                 },
                 "turn/start",
