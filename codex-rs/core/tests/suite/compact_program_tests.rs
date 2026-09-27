@@ -73,7 +73,8 @@ async fn submit_pair(
 #[test_case(Compaction::RemoteHash, History::Resume, Some(CyberAccessProgram::Standard); "standard")]
 #[test_case(Compaction::LocalHash, History::Live, None; "local missing program")]
 #[test_case(Compaction::Fallback, History::Live, Some(CyberAccessProgram::DaybreakBlue); "fallback")]
-#[test_case(Compaction::LocalHash, History::ApiKeyResume, Some(CyberAccessProgram::DaybreakBlue); "api key cannot inherit authorization")]
+#[test_case(Compaction::LocalHash, History::ApiKeyResume, Some(CyberAccessProgram::DaybreakBlue); "api key local resume")]
+#[test_case(Compaction::RemoteHash, History::ApiKeyResume, Some(CyberAccessProgram::DaybreakBlue); "api key remote resume")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_switch_program_pair(
     compaction: Compaction,
@@ -277,17 +278,15 @@ async fn model_switch_program_pair(
     submit_pair(&thread, next_model, Some(CyberAccessProgram::DaybreakRed)).await?;
     thread.shutdown_and_wait().await?;
     let requests = requests.requests();
-    let authorized = !matches!(history, History::ApiKeyResume);
-    let old_program = if authorized {
-        expected_program
-    } else {
-        Value::Null
-    };
-    let new_program = if authorized {
-        json!({"cyber": "daybreak_red"})
-    } else {
-        Value::Null
-    };
+    if matches!(history, History::ApiKeyResume) {
+        for request in &requests {
+            assert_eq!(
+                request.header("authorization").as_deref(),
+                Some("Bearer test-key")
+            );
+        }
+    }
+    let new_program = json!({"cyber": "daybreak_red"});
     let actual = requests
         .iter()
         .map(|request| {
@@ -302,7 +301,7 @@ async fn model_switch_program_pair(
     }
     following.push(json!([next_model, new_program]));
     assert_eq!(&actual[1..], following.as_slice());
-    assert_eq!(actual[0], json!([previous_model, old_program]));
+    assert_eq!(actual[0], json!([previous_model, expected_program]));
     if !local {
         assert_eq!(requests[0].inputs_of_type("compaction_trigger").len(), 1);
     }
