@@ -18,6 +18,7 @@ enum History {
     IncompleteRollback,
     Checkpoint,
     ApiKeyResume,
+    ApiKeyCustomProviderResume,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -75,6 +76,8 @@ async fn submit_pair(
 #[test_case(Compaction::Fallback, History::Live, Some(CyberAccessProgram::DaybreakBlue); "fallback")]
 #[test_case(Compaction::LocalHash, History::ApiKeyResume, Some(CyberAccessProgram::DaybreakBlue); "api key local resume")]
 #[test_case(Compaction::RemoteHash, History::ApiKeyResume, Some(CyberAccessProgram::DaybreakBlue); "api key remote resume")]
+#[test_case(Compaction::LocalHash, History::ApiKeyCustomProviderResume, Some(CyberAccessProgram::DaybreakBlue); "api key custom provider local resume")]
+#[test_case(Compaction::RemoteHash, History::ApiKeyCustomProviderResume, Some(CyberAccessProgram::DaybreakBlue); "api key custom provider remote resume")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_switch_program_pair(
     compaction: Compaction,
@@ -205,7 +208,8 @@ async fn model_switch_program_pair(
         | History::Rollback
         | History::IncompleteRollback
         | History::Checkpoint
-        | History::ApiKeyResume => {
+        | History::ApiKeyResume
+        | History::ApiKeyCustomProviderResume => {
             initial.codex.shutdown_and_wait().await?;
             let rollout_path = initial.codex.rollout_path().expect("rollout");
             if matches!(history, History::Rollback | History::IncompleteRollback) {
@@ -240,13 +244,19 @@ async fn model_switch_program_pair(
                         + "\n",
                 )?;
             }
-            if matches!(history, History::ApiKeyResume) {
+            if matches!(
+                history,
+                History::ApiKeyResume | History::ApiKeyCustomProviderResume
+            ) {
                 builder = builder.with_auth(CodexAuth::from_api_key("test-key"));
             }
             let resume_config = initial.config.clone();
             builder = builder.with_config(move |config| {
                 config.model_catalog = resume_config.model_catalog;
                 config.model_provider = resume_config.model_provider;
+                if matches!(history, History::ApiKeyCustomProviderResume) {
+                    config.model_provider_id = "custom".to_owned();
+                }
                 set_test_compact_prompt(config);
             });
             resumed = builder
@@ -278,7 +288,10 @@ async fn model_switch_program_pair(
     submit_pair(&thread, next_model, Some(CyberAccessProgram::DaybreakRed)).await?;
     thread.shutdown_and_wait().await?;
     let requests = requests.requests();
-    if matches!(history, History::ApiKeyResume) {
+    if matches!(
+        history,
+        History::ApiKeyResume | History::ApiKeyCustomProviderResume
+    ) {
         for request in &requests {
             assert_eq!(
                 request.header("authorization").as_deref(),
@@ -286,7 +299,14 @@ async fn model_switch_program_pair(
             );
         }
     }
-    let new_program = json!({"cyber": "daybreak_red"});
+    let (old_program, new_program) = if matches!(history, History::ApiKeyCustomProviderResume) {
+        for request in &requests {
+            assert_eq!(request.body_json().get("access_programs"), None);
+        }
+        (Value::Null, Value::Null)
+    } else {
+        (expected_program, json!({"cyber": "daybreak_red"}))
+    };
     let actual = requests
         .iter()
         .map(|request| {
@@ -301,7 +321,7 @@ async fn model_switch_program_pair(
     }
     following.push(json!([next_model, new_program]));
     assert_eq!(&actual[1..], following.as_slice());
-    assert_eq!(actual[0], json!([previous_model, expected_program]));
+    assert_eq!(actual[0], json!([previous_model, old_program]));
     if !local {
         assert_eq!(requests[0].inputs_of_type("compaction_trigger").len(), 1);
     }
