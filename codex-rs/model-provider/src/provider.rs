@@ -1272,6 +1272,7 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
             "openai.gpt-6-luna",
             "openai.gpt-5.6-sol",
             "openai.gpt-6-astra",
+            "openai.gpt-daybreak-blue-5.6-sol",
         ] {
             let model_info = manager
                 .get_model_info(
@@ -1287,6 +1288,7 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
                 .await;
             expected_model_info.context_window = Some(872_000);
             assert_eq!(model_info, expected_model_info);
+            assert!(!model_info.used_fallback_model_metadata);
         }
 
         let models = catalog
@@ -1306,6 +1308,7 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
                 ("openai.gpt-5.6-terra", "GPT-5.6 Terra"),
                 ("openai.gpt-5.6-luna", "GPT-5.6 Luna"),
                 ("openai.gpt-5.5", "GPT-5.5"),
+                ("openai.gpt-daybreak-blue-5.6-sol", "Daybreak Blue"),
             ]
         );
 
@@ -1329,7 +1332,19 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
                 "openai.gpt-5.6-terra",
                 "openai.gpt-5.6-luna",
                 "openai.gpt-5.5",
+                "openai.gpt-daybreak-blue-5.6-sol",
             ]
+        );
+        let daybreak_blue = available_models
+            .iter()
+            .find(|preset| preset.model == "openai.gpt-daybreak-blue-5.6-sol")
+            .expect("Bedrock catalog should resolve Daybreak Blue");
+        assert_eq!(
+            (
+                daybreak_blue.model_specialty.as_deref(),
+                daybreak_blue.show_in_picker
+            ),
+            (Some("cyber"), false)
         );
 
         let default_model = available_models

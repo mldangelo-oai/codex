@@ -21,8 +21,19 @@ const GPT_6_SOL_OPENAI_MODEL_ID: &str = "gpt-6-sol";
 const GPT_6_LUNA_OPENAI_MODEL_ID: &str = "gpt-6-luna";
 const GPT_6_ASTRA_OPENAI_MODEL_ID: &str = "gpt-6-astra";
 const GPT_5_5_OPENAI_MODEL_ID: &str = "gpt-5.5";
+const DAYBREAK_BLUE_OPENAI_MODEL_ID: &str = "gpt-daybreak-blue-latest";
+const DAYBREAK_BLUE_BEDROCK_MODEL_ID: &str = "openai.gpt-daybreak-blue-5.6-sol";
 
 pub(crate) fn static_model_catalog() -> ModelsResponse {
+    let mut daybreak_blue = bedrock_model(
+        bundled_openai_model(DAYBREAK_BLUE_OPENAI_MODEL_ID),
+        DAYBREAK_BLUE_BEDROCK_MODEL_ID,
+        "Daybreak Blue",
+        /*priority*/ 8,
+    );
+    // Preserve the bundled cyber model's explicit-selection behavior.
+    daybreak_blue.visibility = ModelVisibility::Hide;
+
     normalize_bedrock_catalog(ModelsResponse {
         models: vec![
             bedrock_model(
@@ -73,6 +84,7 @@ pub(crate) fn static_model_catalog() -> ModelsResponse {
                 "GPT-5.5",
                 /*priority*/ 7,
             ),
+            daybreak_blue,
         ],
     })
 }
@@ -171,6 +183,7 @@ mod tests {
                 AMAZON_BEDROCK_GPT_5_6_TERRA_MODEL_ID,
                 AMAZON_BEDROCK_GPT_5_6_LUNA_MODEL_ID,
                 AMAZON_BEDROCK_GPT_5_5_MODEL_ID,
+                DAYBREAK_BLUE_BEDROCK_MODEL_ID,
             ]
         );
     }
@@ -239,6 +252,12 @@ mod tests {
                     Some(GPT_5_BEDROCK_CONTEXT_WINDOW),
                     WebSearchToolType::Text,
                 ),
+                (
+                    DAYBREAK_BLUE_BEDROCK_MODEL_ID,
+                    Some(GPT_5_BEDROCK_CONTEXT_WINDOW),
+                    Some(872_000),
+                    WebSearchToolType::Text,
+                ),
             ]
         );
     }
@@ -285,7 +304,11 @@ mod tests {
     fn gpt_5_bedrock_models_are_visible() {
         let catalog = static_model_catalog();
 
-        for model in catalog.models {
+        for model in catalog
+            .models
+            .into_iter()
+            .filter(|model| model.slug != DAYBREAK_BLUE_BEDROCK_MODEL_ID)
+        {
             assert_eq!(model.visibility, ModelVisibility::List);
         }
     }
@@ -337,11 +360,19 @@ mod tests {
                 "GPT-6-Astra",
                 1,
             ),
+            (
+                bundled_openai_model(DAYBREAK_BLUE_OPENAI_MODEL_ID),
+                DAYBREAK_BLUE_BEDROCK_MODEL_ID,
+                "Daybreak Blue",
+                8,
+            ),
         ] {
             expected.slug = slug.to_string();
             expected.display_name = display_name.to_string();
             expected.priority = priority;
-            expected.visibility = ModelVisibility::List;
+            if slug != DAYBREAK_BLUE_BEDROCK_MODEL_ID {
+                expected.visibility = ModelVisibility::List;
+            }
             expected.availability_nux = None;
             expected.upgrade = None;
             expected.use_responses_lite = false;
