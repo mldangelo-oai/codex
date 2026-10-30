@@ -2300,7 +2300,8 @@ fn load_output_schema(path: Option<PathBuf>) -> Option<Value> {
         }
     };
 
-    match serde_json::from_str::<Value>(&schema_str) {
+    let schema = schema_str.strip_prefix('\u{feff}').unwrap_or(&schema_str);
+    match serde_json::from_str::<Value>(schema) {
         Ok(value) => Some(value),
         Err(err) => {
             eprintln!(

@@ -18,7 +18,8 @@ async fn exec_includes_output_schema_in_request() -> anyhow::Result<()> {
         "additionalProperties": false
     });
     let schema_path = test.cwd_path().join("schema.json");
-    std::fs::write(&schema_path, serde_json::to_vec_pretty(&schema_contents)?)?;
+    let schema_json = serde_json::to_string_pretty(&schema_contents)?;
+    std::fs::write(&schema_path, format!("\u{feff}{schema_json}"))?;
     let expected_schema: Value = schema_contents;
 
     let server = responses::start_mock_server().await;
